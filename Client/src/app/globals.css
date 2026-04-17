@@ -51,4 +51,15 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
+
+  /* Kanban drag-and-drop animations */
+  .dragging {
+    opacity: 0.5;
+    cursor: grabbing !important;
+  }
+
+  .drag-over {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: rgb(59, 130, 246);
+  }
 }

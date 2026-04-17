@@ -1,6 +1,6 @@
 "use client";
 import { AppLayout } from "@/modules/shared/components/AppLayout";
-import { TaskList } from "@/modules/task/components/TaskList";
+import { TaskManager } from "@/modules/task/components/TaskManager";
 import { useProjectStore } from "@/store/projectStore";
 import { useEffect } from "react";
 
@@ -13,7 +13,7 @@ export default function TasksPage() {
 
   return (
     <AppLayout title="My Tasks" subtitle="All tasks assigned to you">
-      <TaskList />
+      <TaskManager />
     </AppLayout>
   );
 }
