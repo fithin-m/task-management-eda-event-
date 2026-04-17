@@ -7,6 +7,7 @@ import { authService } from "@/services/auth.service";
 import { Button } from "@/shared/components/Button";
 import { Input } from "@/shared/components/Input";
 import toast from "react-hot-toast";
+import GoogleLoginButton from "@/shared/components/GoogleLoginButton";
 
 export function LoginForm() {
   const { setAuth } = useAuthStore();
@@ -116,8 +117,21 @@ export function LoginForm() {
               Sign in
             </Button>
           </form>
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs text-text-muted">OR</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
 
+          {/* Google Login */}
+          <div className="flex justify-center">
+            <GoogleLoginButton />
+          </div>
           <p className="text-xs text-text-secondary text-center mt-5">
+            Admins & Managers use email login
+          </p>
+
+          {/* <p className="text-xs text-text-secondary text-center mt-5">
             Don&apos;t have an account?{" "}
             <Link
               href="/register"
@@ -125,7 +139,7 @@ export function LoginForm() {
             >
               Sign up
             </Link>
-          </p>
+          </p> */}
         </div>
       </div>
     </div>

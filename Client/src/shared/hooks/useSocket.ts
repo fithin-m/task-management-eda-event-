@@ -33,7 +33,6 @@ export function useSocket() {
 
     socketRef.current = socketInstance;
 
-    // ── Chat events ──────────────────────────────────────────────────────
     const onMessage = (message: Message) => {
       addMessage(message.projectId, message);
     };

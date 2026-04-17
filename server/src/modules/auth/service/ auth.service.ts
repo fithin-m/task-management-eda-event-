@@ -2,6 +2,7 @@ import bcrypt from "bcrypt";
 import prisma from "../../../core/database/prisma";
 import { Role } from "@prisma/client";
 import { generateToken } from "../../../core/utils/jwt";
+import { OAuth2Client } from "google-auth-library";
 
 export const registerUser = async (data: any) => {
   const { name, email, password } = data;
@@ -32,7 +33,6 @@ export const registerUser = async (data: any) => {
 export const loginUser = async (data: any) => {
   const { email, password } = data;
 
-  // 1. find user
   const user = await prisma.user.findUnique({
     where: { email }
   });
@@ -41,14 +41,16 @@ export const loginUser = async (data: any) => {
     throw new Error("User not found");
   }
 
-  // 2. compare password
+  if (!user.password) {
+    throw new Error("Please login using Google ");
+  }
+
   const isMatch = await bcrypt.compare(password, user.password);
 
   if (!isMatch) {
     throw new Error("Invalid credentials");
   }
 
-  // 3. generate token
   const token = generateToken({
     userId: user.id,
     role: user.role
@@ -57,5 +59,52 @@ export const loginUser = async (data: any) => {
   return {
     token,
     user
+  };
+};
+
+const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+export const googleLoginUser = async (token: string) => {
+  if (!token) {
+    throw new Error("Token is required");
+  }
+
+  // Verify token with Google
+  const ticket = await client.verifyIdToken({
+    idToken: token,
+    audience: process.env.GOOGLE_CLIENT_ID,
+  });
+
+  const payload = ticket.getPayload();
+
+  if (!payload || !payload.email) {
+    throw new Error("Invalid Google token");
+  }
+
+  const { email, name, picture, sub } = payload;
+
+  let user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+        name: name || "Google User",
+        role: Role.USER,
+        googleId: sub,
+      },
+    });
+  }
+
+  const jwtToken = generateToken({
+    userId: user.id,
+    role: user.role,
+  });
+
+  return {
+    token: jwtToken,
+    user,
   };
 };

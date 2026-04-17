@@ -17,3 +17,14 @@ export const login = async (req: Request, res: Response) => {
     res.status(400).json({ message: error.message });
   }
 };
+export const googleLogin = async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+
+    const data = await authService.googleLoginUser(token);
+
+    res.status(200).json(data);
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
+  }
+};
