@@ -21,25 +21,22 @@ const io = new Server(server, {
   },
 });
 
-// ── Auth middleware for all socket connections ─────────────────────────────
+// Auth middleware for all socket connections
 io.use(socketAuth);
 
-// ── Wire notification emitter to socket server ─────────────────────────────
+//  Wire notification emitter to socket server 
 notificationEmitter.init(io);
 
-// ── Chat + notification socket handlers ────────────────────────────────────
+// Chat + notification socket handlers 
 initChatSocket(io);
 
 async function startServer() {
   try {
-    // RabbitMQ is optional — don't crash if unavailable
     try {
       await connectRabbitMQ();
     } catch (err) {
       console.warn("⚠️  RabbitMQ unavailable — skipping message queue:", err);
     }
-
-    // Start deadline reminder cron
     startDeadlineCron();
 
     server.listen(PORT, () => {

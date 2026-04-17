@@ -11,10 +11,7 @@ export interface CreateNotificationInput {
 }
 
 export class NotificationService {
-  /**
-   * Create a single notification and return it.
-   * Skips creation if userId === actorId (never notify the actor).
-   */
+  
   async create(input: CreateNotificationInput) {
     // Never notify the person who triggered the action
     if (input.actorId && input.userId === input.actorId) return null;
@@ -32,10 +29,6 @@ export class NotificationService {
     });
   }
 
-  /**
-   * Create notifications for multiple recipients at once.
-   * Filters out the actor automatically.
-   */
   async createBulk(
     userIds: string[],
     base: Omit<CreateNotificationInput, "userId">,

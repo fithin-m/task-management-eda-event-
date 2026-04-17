@@ -1,11 +1,4 @@
-/**
- * Deadline Reminder Cron
- * ----------------------
- * Runs every hour and checks for tasks/projects with deadlines
- * that are within 24 hours or have just passed.
- *
- * Uses a simple setInterval — replace with node-cron in production.
- */
+
 import prisma from "../../core/database/prisma";
 import { notificationEmitter } from "./notification.emitter";
 
@@ -16,7 +9,7 @@ async function checkDeadlines() {
   const in24h = new Date(now.getTime() + ONE_DAY_MS);
 
   try {
-    // ── Tasks approaching deadline (within next 24h, not yet overdue) ──────
+    //  Tasks approaching deadline (within next 24h, not yet overdue)
     const upcomingTasks = await prisma.task.findMany({
       where: {
         deadline: { gte: now, lte: in24h },
@@ -38,7 +31,7 @@ async function checkDeadlines() {
       });
     }
 
-    // ── Tasks that just passed deadline ────────────────────────────────────
+    // ── Tasks that just passed deadline 
     const overdueTasks = await prisma.task.findMany({
       where: {
         deadline: {
@@ -77,5 +70,5 @@ export function startDeadlineCron() {
   // Run immediately on startup, then every hour
   checkDeadlines();
   setInterval(checkDeadlines, 60 * 60 * 1000);
-  console.log("⏰ Deadline reminder cron started");
+  console.log("Deadline reminder cron started");
 }
