@@ -6,6 +6,29 @@ const config: Config = {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/modules/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/shared/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/store/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/services/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  safelist: [
+    // Avatar background colors - ensure they're never purged
+    "bg-indigo-600",
+    "bg-blue-600",
+    "bg-violet-600",
+    "bg-emerald-600",
+    "bg-rose-600",
+    "bg-amber-600",
+    "bg-teal-600",
+    "bg-pink-600",
+    // Avatar ring colors
+    "ring-indigo-300",
+    "ring-blue-300",
+    "ring-violet-300",
+    "ring-emerald-300",
+    "ring-rose-300",
+    "ring-amber-300",
+    "ring-teal-300",
+    "ring-pink-300",
   ],
   theme: {
     extend: {
