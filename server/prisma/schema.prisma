@@ -12,15 +12,15 @@ model User {
   name      String
   email     String   @unique
   password  String?
-  googleId String? @unique
+  googleId  String?  @unique
   role      Role
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   projects      ProjectMember[]
-  tasksAssigned Task[]         @relation("AssignedTasks")
-  tasksCreated  Task[]         @relation("CreatedTasks")
+  tasksAssigned Task[]          @relation("AssignedTasks")
+  tasksCreated  Task[]          @relation("CreatedTasks")
   comments      Comment[]
   notifications Notification[]
   messages      Message[]
@@ -49,6 +49,8 @@ model ProjectMember {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
 }
 
 model Task {
@@ -64,9 +66,9 @@ model Task {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee User     @relation("AssignedTasks", fields: [assignedTo], references: [id])
-  creator  User     @relation("CreatedTasks", fields: [createdBy], references: [id])
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User      @relation("AssignedTasks", fields: [assignedTo], references: [id])
+  creator  User      @relation("CreatedTasks", fields: [createdBy], references: [id])
   comments Comment[]
 }
 
@@ -93,7 +95,7 @@ model Notification {
   // Optional links back to the entity that triggered the notification
   taskId    String?
   projectId String?
-  actorId   String?          // who triggered it (to avoid self-notify)
+  actorId   String? // who triggered it (to avoid self-notify)
   createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

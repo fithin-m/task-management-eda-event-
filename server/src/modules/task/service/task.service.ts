@@ -29,24 +29,24 @@ export class TaskService {
       throw new Error("Task is missing required relations (assignee/creator)");
     }
     return {
-      id:          task.id,
-      title:       task.title,
+      id: task.id,
+      title: task.title,
       description: task.description ?? null,
-      projectId:   task.projectId,
-      status:      task.status,
-      priority:    task.priority,
-      deadline:    task.deadline ?? null,
-      createdAt:   task.createdAt,
-      updatedAt:   task.updatedAt,
-      assignedTo:  task.assignee,
-      assignedBy:  task.creator,
+      projectId: task.projectId,
+      status: task.status,
+      priority: task.priority,
+      deadline: task.deadline ?? null,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      assignedTo: task.assignee,
+      assignedBy: task.creator,
     };
   }
 
   private taskInclude() {
     return {
       assignee: { select: { id: true, name: true, email: true } },
-      creator:  { select: { id: true, name: true, email: true } },
+      creator: { select: { id: true, name: true, email: true } },
     } as const;
   }
 
@@ -77,7 +77,6 @@ export class TaskService {
     throw new Error("Not authorized to manage this task");
   }
 
-  // ── CRUD ───────────────────────────────────────────────────────────────────
 
   async createTask(data: any, actor: any) {
     const actorId = this.getActorId(actor);
@@ -106,43 +105,33 @@ export class TaskService {
         description: description ?? null,
         projectId,
         assignedTo,
-        createdBy:   actorId,
-        status:      "TODO",
-        priority:    priority ?? "MEDIUM",
-        deadline:    deadline ? new Date(deadline) : null,
+        createdBy: actorId,
+        status: "TODO",
+        priority: priority ?? "MEDIUM",
+        deadline: deadline ? new Date(deadline) : null,
       },
       include: this.taskInclude(),
     });
 
-    // ── Notify assignee ────────────────────────────────────────────────────
     const actorUser = await prisma.user.findUnique({
       where: { id: actorId },
       select: { name: true },
     });
     notificationEmitter
       .send({
-        userId:    assignedTo,
-        type:      "TASK_ASSIGNED",
-        message:   `Task "${title}" has been assigned to you by ${actorUser?.name ?? "someone"}`,
-        taskId:    task.id,
+        userId: assignedTo,
+        type: "TASK_ASSIGNED",
+        message: `Task "${title}" has been assigned to you by ${actorUser?.name ?? "someone"}`,
+        taskId: task.id,
         projectId: projectId,
-        actorId:   actorId,
+        actorId: actorId,
       })
       .catch((e) => console.error("notification failed:", e));
 
     return this.toTaskDto(task);
   }
 
-  async getTasks(
-    actor: any,
-    query?: {
-      q?: string;
-      status?: string;
-      priority?: string;
-      assignedTo?: string;
-      projectId?: string;
-    },
-  ) {
+  async getTasks(actor: any, query?: any) {
     const actorId = this.getActorId(actor);
     if (!actorId) throw new Error("Unauthorized");
 
@@ -154,15 +143,20 @@ export class TaskService {
       where.assignedTo = actorId;
     }
 
+    // Filters
     if (query?.projectId) where.projectId = String(query.projectId);
-    if (query?.assignedTo) where.assignedTo = String(query.assignedTo);
-    if (query?.status)   where.status   = query.status   as TaskStatus;
-    if (query?.priority) where.priority = query.priority as Priority;
+    if (query?.status) where.status = query.status;
+    if (query?.priority) where.priority = query.priority;
 
-    const q = (query?.q ?? "").trim();
+    if (actor.role !== "USER" && query?.assignedTo) {
+      where.assignedTo = String(query.assignedTo);
+    }
+
+    // Search
+    const q = query?.q?.trim();
     if (q) {
       where.OR = [
-        { title:       { contains: q, mode: "insensitive" } },
+        { title: { contains: q, mode: "insensitive" } },
         { description: { contains: q, mode: "insensitive" } },
       ];
     }
@@ -173,7 +167,7 @@ export class TaskService {
       orderBy: { createdAt: "desc" },
     });
 
-    return tasks.map((t) => this.toTaskDto(t));
+    return tasks.map(this.toTaskDto);
   }
 
   async updateStatus(taskId: string, status: TaskStatus, actor: any) {
@@ -221,19 +215,18 @@ export class TaskService {
       include: this.taskInclude(),
     });
 
-    // ── Notify new assignee ────────────────────────────────────────────────
     const actorUser = await prisma.user.findUnique({
       where: { id: actorId },
       select: { name: true },
     });
     notificationEmitter
       .send({
-        userId:    userId,
-        type:      "TASK_ASSIGNED",
-        message:   `Task "${task.title}" has been assigned to you by ${actorUser?.name ?? "someone"}`,
-        taskId:    task.id,
+        userId: userId,
+        type: "TASK_ASSIGNED",
+        message: `Task "${task.title}" has been assigned to you by ${actorUser?.name ?? "someone"}`,
+        taskId: task.id,
         projectId: task.projectId,
-        actorId:   actorId,
+        actorId: actorId,
       })
       .catch((e) => console.error("notification failed:", e));
 
@@ -242,44 +235,51 @@ export class TaskService {
 
   async deleteTask(taskId: string, actor: any) {
     const actorId = this.getActorId(actor);
+
+    // Validate existence + permission
     const task = await this.requireTaskManage(taskId, actor);
 
-    // ── Notify assignee before deletion ───────────────────────────────────
+    const taskFind = await prisma.task.findUnique({ where: { id: taskId } });
+    if (!taskFind) throw new Error("Task not found");
+
+    //  Safe delete
+    const deleted = await prisma.task.deleteMany({
+      where: { id: taskId },
+    });
+
+    if (deleted.count === 0) {
+      throw new Error("Task already deleted or not found");
+    }
+
     if (task.assignedTo && task.assignedTo !== actorId) {
       notificationEmitter
         .send({
-          userId:    task.assignedTo,
-          type:      "TASK_DELETED",
-          message:   `Task "${task.title}" has been deleted`,
+          userId: task.assignedTo,
+          type: "TASK_DELETED",
+          message: `Task "${task.title}" has been deleted`,
           projectId: task.projectId,
-          actorId:   actorId,
+          actorId,
         })
         .catch((e) => console.error("notification failed:", e));
     }
-
-    await prisma.task.delete({ where: { id: taskId } });
   }
 
-  async updateTask(
-    taskId: string,
-    data: {
-      title?: unknown;
-      description?: unknown;
-      priority?: unknown;
-      deadline?: unknown;
-    },
-    actor: any,
-  ) {
+  async updateTask(taskId: string, data: { title?: unknown; description?: unknown; priority?: unknown; deadline?: unknown; }, actor: any) {
     const actorId = this.getActorId(actor);
     const task = await this.requireTaskManage(taskId, actor);
 
     const patch: Prisma.TaskUpdateInput = {};
-    if (data.title       !== undefined) patch.title       = String(data.title);
+    if (data.title !== undefined) patch.title = String(data.title);
     if (data.description !== undefined) patch.description = data.description ? String(data.description) : null;
-    if (data.priority    !== undefined) patch.priority    = data.priority as Priority;
-    if (data.deadline    !== undefined) {
+    if (data.priority !== undefined) patch.priority = data.priority as Priority;
+    if (data.deadline !== undefined) {
       patch.deadline = data.deadline ? new Date(String(data.deadline)) : null;
     }
+
+    const taskFind = await prisma.task.findMany({
+      where: { id: taskId },
+    });
+    if (taskFind.length === 0) throw new Error("Task not found");
 
     const updated = await prisma.task.update({
       where: { id: taskId },
@@ -287,16 +287,15 @@ export class TaskService {
       include: this.taskInclude(),
     });
 
-    // ── Notify assignee of update (skip if actor is the assignee) ─────────
     if (task.assignedTo && task.assignedTo !== actorId) {
       notificationEmitter
         .send({
-          userId:    task.assignedTo,
-          type:      "TASK_UPDATED",
-          message:   `Task "${updated.title}" has been updated`,
-          taskId:    task.id,
+          userId: task.assignedTo,
+          type: "TASK_UPDATED",
+          message: `Task "${updated.title}" has been updated`,
+          taskId: task.id,
           projectId: task.projectId,
-          actorId:   actorId,
+          actorId: actorId,
         })
         .catch((e) => console.error("notification failed:", e));
     }
@@ -304,7 +303,6 @@ export class TaskService {
     return this.toTaskDto(updated);
   }
 
-  // ── Comments ───────────────────────────────────────────────────────────────
 
   async getComments(taskId: string, actor: any) {
     const actorId = this.getActorId(actor);
@@ -316,8 +314,8 @@ export class TaskService {
     });
     if (!task) throw new Error("Task not found");
 
-    const isAdmin    = actor.role === "ADMIN";
-    const isManager  = actor.role === "MANAGER" && task.project?.createdBy === actorId;
+    const isAdmin = actor.role === "ADMIN";
+    const isManager = actor.role === "MANAGER" && task.project?.createdBy === actorId;
     const isAssignee = task.assignedTo === actorId;
 
     if (!isAdmin && !isManager && !isAssignee) {
@@ -344,8 +342,8 @@ export class TaskService {
     });
     if (!task) throw new Error("Task not found");
 
-    const isAdmin    = actor.role === "ADMIN";
-    const isManager  = actor.role === "MANAGER" && task.project?.createdBy === actorId;
+    const isAdmin = actor.role === "ADMIN";
+    const isManager = actor.role === "MANAGER" && task.project?.createdBy === actorId;
     const isAssignee = task.assignedTo === actorId;
 
     if (!isAdmin && !isManager && !isAssignee) {

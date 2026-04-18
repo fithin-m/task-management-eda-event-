@@ -48,6 +48,13 @@ export class TaskController {
     try {
       const actor = (req as any).user;
       const taskId = String(req.params.taskId);
+
+      // Check if request body has any data
+      if (!req.body || Object.keys(req.body).length === 0) {
+        res.status(400).json({ success: false, message: "Request body cannot be empty" });
+        return;
+      }
+
       const task = await this.service.updateTask(taskId, req.body, actor);
       res.status(200).json({ success: true, message: "Task updated", data: task });
     } catch (error: any) {
@@ -66,6 +73,12 @@ export class TaskController {
         return;
       }
 
+      const validStatuses = ["TODO", "IN_PROGRESS", "COMPLETED"];
+      if (!validStatuses.includes(status)) {
+        res.status(400).json({ success: false, message: "Invalid status. Must be TODO, IN_PROGRESS, or COMPLETED" });
+        return;
+      }
+
       const task = await this.service.updateStatus(taskId, status, actor);
       res.status(200).json({ success: true, data: task });
     } catch (error: any) {
@@ -79,7 +92,7 @@ export class TaskController {
       const taskId = String(req.params.taskId);
       const { userId } = req.body;
 
-      if (!userId) {
+      if (!userId || String(userId).trim() === "") {
         res.status(400).json({ success: false, message: "userId is required" });
         return;
       }

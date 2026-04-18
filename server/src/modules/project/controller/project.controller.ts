@@ -35,6 +35,12 @@ export class ProjectController {
       const actor = (req as any).user;
       const projectId = req.params.projectId as string;
 
+      // Check if request body has any data
+      if (!req.body || Object.keys(req.body).length === 0) {
+        res.status(400).json({ success: false, message: "Request body cannot be empty" });
+        return;
+      }
+
       const project = await this.service.updateProject(
         projectId,
         req.body,
@@ -69,9 +75,16 @@ export class ProjectController {
     try {
       const actor = (req as any).user;
       const projectId = req.params.projectId as string;
+      const { userId } = req.body;
+
+      if (!userId || String(userId).trim() === "") {
+        res.status(400).json({ success: false, message: "userId is required" });
+        return;
+      }
+
       const result = await this.service.addMember(
         projectId,
-        req.body.userId,
+        userId,
         actor
       );
 

@@ -8,54 +8,62 @@ export class ProjectService {
   }
 
   async createProject(data: any, actor: any) {
-    if (!data.name) throw new Error("Project name required");
     const actorId = this.getActorId(actor);
     if (!actorId) throw new Error("Unauthorized");
 
-    const managerId =
-      actor.role === "ADMIN" && data.managerId ? String(data.managerId) : null;
-    const manager =
-      managerId && actor.role === "ADMIN"
-        ? await prisma.user.findUnique({ where: { id: managerId } })
-        : null;
+    const name = String(data.name || "").trim();
+    if (!name) throw new Error("Project name required");
 
-    if (managerId && (!manager || manager.role !== Role.MANAGER)) {
-      throw new Error("Invalid manager");
+    let deadline: Date | null = null;
+    if (data.deadline) {
+      const d = new Date(data.deadline);
+      if (isNaN(d.getTime())) throw new Error("Invalid deadline");
+      deadline = d;
     }
 
-    const [project] = await prisma.$transaction(async (tx) => {
-      const created = await tx.project.create({
-        data: {
-          name:        data.name,
-          description: data.description ?? null,
-          createdBy:   actorId,
-          deadline:    data.deadline ? new Date(data.deadline) : null,
-        },
+    let managerId: string | null = null;
+
+    if (actor.role === "ADMIN" && data.managerId) {
+      const manager = await prisma.user.findUnique({
+        where: { id: data.managerId },
+        select: { id: true, role: true },
       });
 
-      if (actor.role === "MANAGER") {
-        await tx.projectMember.create({
-          data: { projectId: created.id, userId: actorId, role: "MANAGER" },
-        });
+      if (!manager || manager.role !== "MANAGER") {
+        throw new Error("Invalid manager");
       }
 
-      if (manager) {
-        await tx.projectMember.create({
-          data: { projectId: created.id, userId: manager.id, role: "MANAGER" },
-        });
-      }
+      managerId = manager.id;
+    }
 
-      return [created] as const;
+    const project = await prisma.project.create({
+      data: {
+        name,
+        description: data.description?.trim() || null,
+        createdBy: actorId,
+        deadline,
+      },
     });
 
-    // ── Notify assigned manager (if admin created and assigned one) ────────
-    if (manager) {
+    if (actor.role === "MANAGER") {
+      await prisma.projectMember.create({
+        data: { projectId: project.id, userId: actorId, role: "MANAGER" },
+      });
+    }
+
+    if (managerId) {
+      await prisma.projectMember.create({
+        data: { projectId: project.id, userId: managerId, role: "MANAGER" },
+      });
+    }
+
+    if (managerId) {
       await notificationEmitter.send({
-        userId:    manager.id,
-        type:      "PROJECT_ASSIGNED",
-        message:   `Project "${project.name}" has been assigned to you by Admin`,
+        userId: managerId,
+        type: "PROJECT_ASSIGNED",
+        message: `Project "${project.name}" assigned to you`,
         projectId: project.id,
-        actorId:   actorId,
+        actorId,
       });
     }
 
@@ -90,19 +98,39 @@ export class ProjectService {
   async updateProject(projectId: string, data: any, actor: any) {
     const actorId = this.getActorId(actor);
 
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
-    if (!project) throw new Error("Project not found");
+    // 1. Check project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
 
-    if (actor.role !== "ADMIN" && project.createdBy !== actorId) {
-      throw new Error("Not authorized to update this project");
+    if (!project) {
+      throw new Error("Project not found");
     }
 
+    // 2. Authorization
+    if (actor.role !== "ADMIN" && project.createdBy !== actorId) {
+      throw new Error("Not authorized");
+    }
+
+    // 3. Validation
+    if (data.name !== undefined && !String(data.name).trim()) {
+      throw new Error("Project name cannot be empty");
+    }
+
+    if (data.deadline !== undefined && data.deadline) {
+      const d = new Date(data.deadline);
+      if (isNaN(d.getTime())) {
+        throw new Error("Invalid deadline");
+      }
+    }
+
+    // 4. Update directly
     return prisma.project.update({
       where: { id: projectId },
       data: {
-        name:        data.name        ?? undefined,
-        description: data.description ?? undefined,
-        deadline:    data.deadline ? new Date(data.deadline) : undefined,
+        name: data.name?.trim(),
+        description: data.description?.trim() || null,
+        deadline: data.deadline ? new Date(data.deadline) : null,
       },
     });
   }
@@ -110,54 +138,77 @@ export class ProjectService {
   async deleteProject(projectId: string, actor: any) {
     const actorId = this.getActorId(actor);
 
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
-    if (!project) throw new Error("Project not found");
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, createdBy: true }
+    });
 
-    if (actor.role !== "ADMIN" && project.createdBy !== actorId) {
-      throw new Error("Not authorized to delete this project");
+    if (!project) {
+      throw new Error("Project not found");
     }
 
-    await prisma.project.delete({ where: { id: projectId } });
+    if (actor.role !== "ADMIN" && project.createdBy !== actorId) {
+      throw new Error("Not authorized");
+    }
+
+    return prisma.project.delete({
+      where: { id: projectId },
+    });
   }
 
   async addMember(projectId: string, userId: string, actor: any) {
     const actorId = this.getActorId(actor);
+    const userIdTrimmed = String(userId).trim();
+
+    if (!userIdTrimmed) throw new Error("User ID is required");
 
     const project = await prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw new Error("Project not found");
 
+
+    if (userIdTrimmed === project.createdBy) {
+      throw new Error("Project owner is already part of the project");
+    }
+
     const isManagerOnProject =
       actor.role === "MANAGER"
         ? Boolean(
-            await prisma.projectMember.findFirst({
-              where: { projectId, userId: actorId, role: "MANAGER" },
-            }),
-          )
+          await prisma.projectMember.findFirst({
+            where: { projectId, userId: actorId, role: "MANAGER" },
+          }),
+        )
         : false;
 
     if (actor.role !== "ADMIN" && project.createdBy !== actorId && !isManagerOnProject) {
       throw new Error("Not authorized");
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    // Check if user exists before adding
+    const user = await prisma.user.findUnique({ where: { id: userIdTrimmed } });
     if (!user) throw new Error("User not found");
+    if (!user.isActive) throw new Error("Cannot add inactive user to project");
 
-    const existing = await prisma.projectMember.findFirst({ where: { projectId, userId } });
-    if (existing) throw new Error("User already in project");
+    try {
+      const member = await prisma.projectMember.create({
+        data: { projectId, userId: userIdTrimmed, role: "MEMBER" },
+      });
 
-    const member = await prisma.projectMember.create({
-      data: { projectId, userId, role: "MEMBER" },
-    });
+      // ── Notify the added user ──────────────────────────────────────────────
+      await notificationEmitter.send({
+        userId: userIdTrimmed,
+        type: "PROJECT_ASSIGNED",
+        message: `You have been added to project "${project.name}"`,
+        projectId: project.id,
+        actorId: actorId,
+      });
 
-    // ── Notify the added user ──────────────────────────────────────────────
-    await notificationEmitter.send({
-      userId,
-      type:      "PROJECT_ASSIGNED",
-      message:   `You have been added to project "${project.name}"`,
-      projectId: project.id,
-      actorId:   actorId,
-    });
-
-    return member;
+      return member;
+    } catch (error: any) {
+      // Handle unique constraint violation (Prisma error code P2002)
+      if (error.code === 'P2002') {
+        throw new Error("User already in project");
+      }
+      throw error;
+    }
   }
 }
